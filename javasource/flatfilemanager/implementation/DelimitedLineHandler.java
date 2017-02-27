@@ -6,6 +6,18 @@ import java.io.Writer;
 import java.util.HashMap;
 import java.util.List;
 
+import com.mendix.core.Core;
+import com.mendix.core.CoreException;
+import com.mendix.logging.ILogNode;
+import com.mendix.systemwideinterfaces.core.IContext;
+import com.mendix.systemwideinterfaces.core.IMendixIdentifier;
+import com.mendix.systemwideinterfaces.core.IMendixObject;
+
+import au.com.bytecode.opencsv.CSVParser;
+import au.com.bytecode.opencsv.CSVWriter;
+import flatfilemanager.implementation.FileHandler.TemplateConfiguration;
+import flatfilemanager.proxies.DataSource;
+import flatfilemanager.proxies.Field;
 import mxmodelreflection.proxies.MxObjectMember;
 import mxmodelreflection.proxies.MxObjectReference;
 import mxmodelreflection.proxies.MxObjectType;
@@ -19,21 +31,6 @@ import replication.implementation.CustomReplicationSettings;
 import replication.implementation.ErrorHandler;
 import replication.implementation.MFValueParser;
 import replication.interfaces.IValueParser;
-import au.com.bytecode.opencsv.CSVParser;
-import au.com.bytecode.opencsv.CSVWriter;
-
-import com.mendix.core.Core;
-import com.mendix.core.CoreException;
-import com.mendix.logging.ILogNode;
-import com.mendix.systemwideinterfaces.core.IContext;
-import com.mendix.systemwideinterfaces.core.IMendixIdentifier;
-import com.mendix.systemwideinterfaces.core.IMendixObject;
-import com.mendix.systemwideinterfaces.core.meta.IMetaPrimitive.PrimitiveType;
-
-import flatfilemanager.implementation.FileHandler.TemplateConfiguration;
-import flatfilemanager.proxies.DataSource;
-import flatfilemanager.proxies.Field;
-import flatfilemanager.proxies.FieldDataType;
 
 public class DelimitedLineHandler extends ILineHandler {
 
@@ -230,18 +227,18 @@ public class DelimitedLineHandler extends ILineHandler {
 		settings.addAssociationMapping(alias, (String) reference.getValue(this.context, MxObjectReference.MemberNames.CompleteName.toString()), (String) objectType.getValue(this.context, MxObjectType.MemberNames.CompleteName.toString()), (String) member.getValue(this.context, MxObjectMember.MemberNames.AttributeName.toString()), parser, KeyType.NoKey, false);
 	}
 
-	private PrimitiveType determineRenderType(IMendixObject columnObject) {
-		FieldDataType dataType = FieldDataType.valueOf((String) columnObject.getValue(this.context, Field.MemberNames.FormatAsDataType.toString()));
-		switch (dataType) {
-		case DecimalType:
-			return PrimitiveType.Float;
-		case IntegerType:
-			return PrimitiveType.Long;
-		case StringType:
-		default:
-			return PrimitiveType.String;
-		}
-	}
+//	private PrimitiveType determineRenderType(IMendixObject columnObject) {
+//		FieldDataType dataType = FieldDataType.valueOf((String) columnObject.getValue(this.context, Field.MemberNames.FormatAsDataType.toString()));
+//		switch (dataType) {
+//		case DecimalType:
+//			return PrimitiveType.Decimal;
+//		case IntegerType:
+//			return PrimitiveType.Long;
+//		case StringType:
+//		default:
+//			return PrimitiveType.String;
+//		}
+//	}
 
 	private Object getValueFromReference(IMendixObject highlightObject, IMendixObject exportObject) throws CoreException {
 		List<IMendixObject> referenceResult = this.getResultByHighlight(highlightObject, exportObject, 1);
@@ -281,7 +278,7 @@ public class DelimitedLineHandler extends ILineHandler {
 		IMendixObject member = Core.retrieveId(this.context, (IMendixIdentifier) columnObject.getValue(this.context, Field.MemberNames.Field_MxObjectMember.toString()));
 		Object value = exportObject.getValue(this.context, (String) member.getValue(this.context, MxObjectMember.MemberNames.AttributeName.toString()));
 
-		Object strValue = ValueParser.getTrimmedValue(value);
+		Object strValue = ValueParser.getTrimmedValue(value, null, null);
 		if (strValue == null)
 			return "";
 

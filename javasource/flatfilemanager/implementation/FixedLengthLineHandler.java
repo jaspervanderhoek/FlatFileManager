@@ -170,7 +170,7 @@ public class FixedLengthLineHandler extends ILineHandler {
 		FieldDataType dataType = FieldDataType.valueOf((String) columnObject.getValue(this.context, Field.MemberNames.FormatAsDataType.toString()));
 		switch (dataType) {
 		case DecimalType:
-			return PrimitiveType.Float;
+			return PrimitiveType.Decimal;
 		case IntegerType:
 			return PrimitiveType.Long;
 		case StringType:

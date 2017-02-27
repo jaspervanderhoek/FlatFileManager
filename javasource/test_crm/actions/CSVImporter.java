@@ -124,6 +124,7 @@ public class CSVImporter {
 		BufferedInputStream fis1 = new BufferedInputStream(new FileInputStream(file));
 		byte[] byteData = new byte[fis1.available()];
 		fis1.read(byteData);
+		fis1.close();
 
 		CharsetDetector detector = new CharsetDetector();
 		detector.setText(byteData);
