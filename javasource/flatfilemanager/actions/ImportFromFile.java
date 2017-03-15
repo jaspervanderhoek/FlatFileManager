@@ -18,7 +18,7 @@ public class ImportFromFile extends CustomJavaAction<Boolean>
 {
 	private IMendixObject ImportObject;
 	private IMendixObject __ImportConfig;
-	private flatfilemanager.proxies.TemplateSet ImportConfig;
+	private flatfilemanager.proxies.ExportTemplateSet ImportConfig;
 	private IMendixObject __ImportFileParam;
 	private system.proxies.FileDocument ImportFileParam;
 
@@ -33,7 +33,7 @@ public class ImportFromFile extends CustomJavaAction<Boolean>
 	@Override
 	public Boolean executeAction() throws Exception
 	{
-		this.ImportConfig = __ImportConfig == null ? null : flatfilemanager.proxies.TemplateSet.initialize(getContext(), __ImportConfig);
+		this.ImportConfig = __ImportConfig == null ? null : flatfilemanager.proxies.ExportTemplateSet.initialize(getContext(), __ImportConfig);
 
 		this.ImportFileParam = __ImportFileParam == null ? null : system.proxies.FileDocument.initialize(getContext(), __ImportFileParam);
 

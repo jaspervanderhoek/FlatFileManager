@@ -13,9 +13,6 @@ import java.io.OutputStreamWriter;
 import java.util.HashMap;
 import java.util.List;
 
-import mxmodelreflection.proxies.MxObjectReference;
-import mxmodelreflection.proxies.MxObjectType;
-
 import org.apache.commons.io.IOUtils;
 
 import com.ibm.icu.text.CharsetDetector;
@@ -30,8 +27,10 @@ import com.mendix.systemwideinterfaces.core.IMendixObject;
 import flatfilemanager.proxies.FormatType;
 import flatfilemanager.proxies.LineEndChar;
 import flatfilemanager.proxies.ReferenceOrObject;
-import flatfilemanager.proxies.SortOrder;
 import flatfilemanager.proxies.Template;
+import flatfilemanager.proxies.TemplateReference;
+import mxmodelreflection.proxies.MxObjectReference;
+import mxmodelreflection.proxies.MxObjectType;
 
 public class FileHandler {
 
@@ -148,48 +147,14 @@ public class FileHandler {
 		File tmpFile = new File(Core.getConfiguration().getTempPath().getAbsolutePath() + "/" + this.parameterObject.getId().toLong());
 
 		HashMap<String, String> sortmap = new HashMap<String, String>();
-		sortmap.put(SortOrder.MemberNames.OrderNr.toString(), "ASC");
-		List<IMendixObject> sortedList = Core.retrieveXPathQuery(this.context, "//" + SortOrder.getType() + "[" + SortOrder.MemberNames.SortOrder_TemplateSet + "=" + this.templateConfig.getId().toLong() + "]", Integer.MAX_VALUE, 0, sortmap);
+		sortmap.put(TemplateReference.MemberNames.OrderNr.toString(), "ASC");
+		List<IMendixObject> sortedList = Core.retrieveXPathQuery(this.context, "//" + TemplateReference.getType() + "[" + TemplateReference.MemberNames.TemplateReference_TemplateSet + "=" + this.templateConfig.getId().toLong() + "]", Integer.MAX_VALUE, 0, sortmap);
 		try {
 			FileOutputStream out = new FileOutputStream(tmpFile);
 			OutputStreamWriter writer = new OutputStreamWriter(out, "UTF-8");
 
-			for (IMendixObject sortOrder : sortedList) {
-				IMendixObject template = Core.retrieveId(this.context, (IMendixIdentifier) sortOrder.getValue(this.context, SortOrder.MemberNames.SortOrder_Template.toString()));
-				TemplateConfiguration config = getTemplateConfig(template);
-				this.logger.debug("Start exporting using template: " + config.getNumber() );
-				
-				ILineHandler lineHandler = LineHandlerFactory.getLineHandler(this.context, config, writer);
-
-				ReferenceOrObject source = ReferenceOrObject.valueOf((String) sortOrder.getValue(this.context, SortOrder.MemberNames.ObjectSource.toString()));
-
-				if (source == ReferenceOrObject.Reference) {
-					this.logger.debug("Creating multiple lines, using template: " + config.getNumber() );
-					
-					SortOrder so = SortOrder.initialize(this.context, sortOrder);
-					MxObjectReference ref = so.getSortOrder_MxObjectReference();
-					MxObjectType objTypeTo = so.getSortOrder_MxObjectType_To();
-
-					HashMap<String, String> sortMap = new HashMap<String, String>();
-					sortMap.put("createdDate", "ASC");
-					int totalSize = 0, limit = 1000, offset = 0;
-					List<IMendixObject> result;
-					do {
-						result = Core.retrieveXPathQuery(this.context, "//" + objTypeTo.getCompleteName() + "[" + ref.getCompleteName() + "=" + this.parameterObject.getId().toLong() + "]", limit, offset, sortMap);
-						for (IMendixObject associatedObject : result) {
-							lineHandler.writeLine(associatedObject);
-						}
-						totalSize+=result.size();
-						offset += limit;
-					}
-					while( result.size() > 0 );
-					
-					this.logger.trace("Processing association: " + ref.getCompleteName() + ", retrieved " + totalSize + " associated objects, using template: " + config.getNumber() );
-				}
-				else {
-					this.logger.debug("Creating single line, using template: " + config.getNumber() );
-					lineHandler.writeLine(this.parameterObject);
-				}
+			for (IMendixObject templateRef : sortedList) {
+				processTemplateReference(writer, templateRef, this.parameterObject);
 			}
 			writer.flush();
 			writer.close();
@@ -202,10 +167,62 @@ public class FileHandler {
 		}
 	}
 
+	public void processTemplateReference( OutputStreamWriter writer, IMendixObject templateRef, IMendixObject exportObject ) throws CoreException {
+		IMendixObject template = Core.retrieveId(this.context, (IMendixIdentifier) templateRef.getValue(this.context, TemplateReference.MemberNames.TemplateReference_Template.toString()));
+		TemplateConfiguration config = getTemplateConfig(template);
+		this.logger.debug("Start exporting using template: " + config.getNumber() );
+		
+		ILineHandler lineHandler = LineHandlerFactory.getLineHandler(this.context, config, writer);
+
+		ReferenceOrObject source = ReferenceOrObject.valueOf((String) templateRef.getValue(this.context, TemplateReference.MemberNames.ObjectSource.toString()));
+		IMendixIdentifier subTemplateId = templateRef.getValue(this.context, TemplateReference.MemberNames.TemplateReference_SubTemplate.toString());
+		IMendixObject subTemplate = null;
+		if( subTemplateId != null )
+			subTemplate = Core.retrieveId(this.context, subTemplateId);
+
+		if (source == ReferenceOrObject.Reference) {
+			this.logger.debug("Creating multiple lines, using template: " + config.getNumber() );
+			
+			TemplateReference tr = TemplateReference.initialize(this.context, templateRef);
+
+			MxObjectReference ref = tr.getTemplateReference_MxObjectReference();
+			MxObjectType objTypeTo = tr.getTemplateReference_MxObjectType_To();
+
+			
+			HashMap<String, String> sortMap = new HashMap<String, String>();
+			sortMap.put("createdDate", "ASC");
+			int totalSize = 0, limit = 1000, offset = 0;
+			List<IMendixObject> result;
+			do {
+				result = Core.retrieveXPathQuery(this.context, "//" + objTypeTo.getCompleteName() + "[" + ref.getCompleteName() + "=" + exportObject.getId().toLong() + "]", limit, offset, sortMap);
+				for (IMendixObject associatedObject : result) {
+					lineHandler.writeLine(associatedObject);
+					
+					if( subTemplate != null ) {
+						processTemplateReference(writer, subTemplate, associatedObject);
+					}
+				}
+				totalSize+=result.size();
+				offset += limit;
+			}
+			while( result.size() > 0 );
+
+			this.logger.trace("Processing association: " + ref.getCompleteName() + ", retrieved " + totalSize + " associated objects, using template: " + config.getNumber() );
+		}
+		else {
+			this.logger.debug("Creating single line, using template: " + config.getNumber() );
+			lineHandler.writeLine(exportObject);
+			if( subTemplate != null ) {
+				processTemplateReference(writer, subTemplate, exportObject);
+			}
+		}
+		
+	}
+
 	public void importFromFile(IMendixObject importFile) throws CoreException {
 		HashMap<String, String> sortmap = new HashMap<String, String>();
-		sortmap.put(SortOrder.MemberNames.OrderNr.toString(), "ASC");
-		List<IMendixObject> sortedList = Core.retrieveXPathQuery(this.context, "//" + SortOrder.getType() + "[" + SortOrder.MemberNames.SortOrder_TemplateSet + "=" + this.templateConfig.getId().toLong() + "]", Integer.MAX_VALUE, 0, sortmap);
+		sortmap.put(TemplateReference.MemberNames.OrderNr.toString(), "ASC");
+		List<IMendixObject> sortedList = Core.retrieveXPathQuery(this.context, "//" + TemplateReference.getType() + "[" + TemplateReference.MemberNames.TemplateReference_TemplateSet + "=" + this.templateConfig.getId().toLong() + "]", Integer.MAX_VALUE, 0, sortmap);
 		try {
 			if (sortedList.size() > 1)
 				throw new CoreException("Import templates currently only support 1 template. Please us a template set with a single template in it.");
@@ -213,7 +230,7 @@ public class FileHandler {
 			BufferedReader reader = new BufferedReader(new InputStreamReader(Core.getFileDocumentContent(this.context, importFile), "UTF-8"));
 
 			for (IMendixObject sortOrder : sortedList) {
-				IMendixObject template = Core.retrieveId(this.context, (IMendixIdentifier) sortOrder.getValue(this.context, SortOrder.MemberNames.SortOrder_Template.toString()));
+				IMendixObject template = Core.retrieveId(this.context, (IMendixIdentifier) sortOrder.getValue(this.context, TemplateReference.MemberNames.TemplateReference_Template.toString()));
 				TemplateConfiguration config = getTemplateConfig(template);
 				
 				this.logger.debug("Start importing using template: " + config.getNumber() );
@@ -224,14 +241,14 @@ public class FileHandler {
 				/* 
 				 * Validate the input object and import the file based on the association or direct into the parameter
 				 */
-				IMendixIdentifier objFromId = sortOrder.getValue(this.context, SortOrder.MemberNames.SortOrder_MxObjectType_From.toString() );
+				IMendixIdentifier objFromId = sortOrder.getValue(this.context, TemplateReference.MemberNames.TemplateReference_MxObjectType_From.toString() );
 				if( objFromId == null ) 
 					throw new CoreException("Invalid configuration for template: " + config.getNumber() + " no parameter object type specified");
 //TODO validate:				IMendixObject objFrom = Core.retrieveId(this.context, objFromId);
 				
-				IMendixIdentifier refId = sortOrder.getValue(this.context, SortOrder.MemberNames.SortOrder_MxObjectReference.toString() );
+				IMendixIdentifier refId = sortOrder.getValue(this.context, TemplateReference.MemberNames.TemplateReference_MxObjectReference.toString() );
 				if( refId != null ) {
-					IMendixIdentifier objToId = sortOrder.getValue(this.context, SortOrder.MemberNames.SortOrder_MxObjectType_To.toString() );
+					IMendixIdentifier objToId = sortOrder.getValue(this.context, TemplateReference.MemberNames.TemplateReference_MxObjectType_To.toString() );
 					if( objToId == null ) 
 						throw new CoreException("Invalid configuration for template: " + config.getNumber() + " no target object type specified");
 					

@@ -142,9 +142,9 @@ public class DelimitedLineHandler extends ILineHandler {
 
 		String nextLine;
 		String[] content;
-		int lineNumber = 0, colNr = 0;
+		int lineNumber = 0, colNr = 1;
 		while ((nextLine = reader.readLine()) != null) {
-			colNr = 0;
+			colNr = 1;
 			if (lineNumber != 0 || !this.config.headerOnFirstLine() ) {
 				content = parser.parseLine(nextLine);
 				if (content.length == 1)
@@ -153,7 +153,7 @@ public class DelimitedLineHandler extends ILineHandler {
 				for (IMendixObject columnObject : result) {
 					try {
 
-						String alias = columnObject.getValue(this.context, Field.MemberNames.Description_Calculated.toString());
+						String alias = columnObject.getValue(this.context, Field.MemberNames.Description.toString());
 						if (this.logger.isDebugEnabled())
 							this.logger.debug(alias + " - NrOfValues" + content.length);
 						
@@ -207,8 +207,8 @@ public class DelimitedLineHandler extends ILineHandler {
 		if (mfId != null) {
 			parser = new MFValueParser(this.context, Core.retrieveId(this.context, mfId));
 		}
-
-		String alias = String.valueOf( columnObject.getValue(this.context, Field.MemberNames.ColNumber.toString()) );
+		
+		String alias = ValueParser.getTrimmedValue( columnObject.getValue(this.context, Field.MemberNames.ColNumber.toString()), null, null );
 		settings.addColumnMapping(alias, (String) member.getValue(this.context, MxObjectMember.MemberNames.AttributeName.toString()), KeyType.NoKey, false, parser);
 	}
 
