@@ -5,6 +5,7 @@ import java.io.IOException;
 import java.io.Writer;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Map.Entry;
 
 import com.mendix.core.Core;
 import com.mendix.core.CoreException;
@@ -16,6 +17,7 @@ import com.mendix.systemwideinterfaces.core.IMendixObject;
 import au.com.bytecode.opencsv.CSVParser;
 import au.com.bytecode.opencsv.CSVWriter;
 import flatfilemanager.implementation.FileHandler.TemplateConfiguration;
+import flatfilemanager.implementation.FileHandler.TemplateConfiguration.ColumnConfig;
 import flatfilemanager.proxies.DataSource;
 import flatfilemanager.proxies.Field;
 import mxmodelreflection.proxies.MxObjectMember;
@@ -72,15 +74,16 @@ public class DelimitedLineHandler extends ILineHandler {
 
 	private String[] getLineContent(IMendixObject object) throws CoreException, IOException {
 
-		HashMap<String, String> sortMap = new HashMap<String, String>();
-		sortMap.put(Field.MemberNames.ColNumber.toString(), "ASC");
-		List<IMendixObject> result = Core.retrieveXPathQuery(this.context, "//" + Field.getType() + "[" + Field.MemberNames.Field_Template + "='" + this.config.getId() + "']", Integer.MAX_VALUE, 0, sortMap);
+		
 
-		String[] entries = new String[result.size()];
-		IMendixObject column;
-		for (int i = 0; i < result.size(); i++) {
-			column = result.get(i);
+		String[] entries = new String[this.config.getColumns().size()];
+		int i = -1;
+		for (Entry<Integer, ColumnConfig> entry : this.config.getColumns().entrySet()) {
+			ColumnConfig config = entry.getValue();
+			IMendixObject column = config.getColumnObj();
 			DataSource source = DataSource.valueOf((String) column.getValue(this.context, Field.MemberNames.DataSource.toString()));
+//			Integer colNr = entry.getKey();
+			
 			String value = null;
 			switch (source) {
 			case Attribute:
@@ -95,7 +98,7 @@ public class DelimitedLineHandler extends ILineHandler {
 			case Newline:
 				continue;
 			}
-			entries[i] = value;
+			entries[++i] = value;
 		}
 
 		return entries;

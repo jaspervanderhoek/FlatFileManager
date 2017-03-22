@@ -19,7 +19,7 @@ public class ExportToFile extends CustomJavaAction<java.lang.Boolean>
 {
 	private IMendixObject ExportObject;
 	private IMendixObject __ExportConfig;
-	private flatfilemanager.proxies.ExportTemplateSet ExportConfig;
+	private flatfilemanager.proxies.TemplateSet ExportConfig;
 	private IMendixObject __ExportFile;
 	private system.proxies.FileDocument ExportFile;
 	private java.lang.String Filename;
@@ -36,7 +36,7 @@ public class ExportToFile extends CustomJavaAction<java.lang.Boolean>
 	@Override
 	public java.lang.Boolean executeAction() throws Exception
 	{
-		this.ExportConfig = __ExportConfig == null ? null : flatfilemanager.proxies.ExportTemplateSet.initialize(getContext(), __ExportConfig);
+		this.ExportConfig = __ExportConfig == null ? null : flatfilemanager.proxies.TemplateSet.initialize(getContext(), __ExportConfig);
 
 		this.ExportFile = __ExportFile == null ? null : system.proxies.FileDocument.initialize(getContext(), __ExportFile);
 
