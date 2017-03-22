@@ -25,7 +25,6 @@ import mxmodelreflection.proxies.MxObjectMember;
 import mxmodelreflection.proxies.MxObjectReference;
 import mxmodelreflection.proxies.MxObjectType;
 import replication.ValueParser;
-import replication.ValueParser.ParseException;
 import replication.implementation.NotImplementedException;
 
 public class FixedLengthLineHandler extends ILineHandler {
@@ -55,7 +54,7 @@ public class FixedLengthLineHandler extends ILineHandler {
 	public void writeLine(IMendixObject object) throws CoreException {
 		try {
 			StringBuilder builder = this.getLineContent(object);
-			this.writer.append(builder.toString() + "\r\n");
+			this.writer.append(builder.toString() + this.config.getLineEnd());
 		}
 		catch (IOException e) {
 			throw new CoreException(e);
@@ -65,26 +64,25 @@ public class FixedLengthLineHandler extends ILineHandler {
 	protected StringBuilder getLineContent(IMendixObject object) throws CoreException {
 		StringBuilder builder = new StringBuilder(this.config.getTotalLength());
 
-		HashMap<String, String> sortMap = new HashMap<String, String>();
-		sortMap.put(Field.MemberNames.ColNumber.toString(), "ASC");
-		List<IMendixObject> result = Core.retrieveXPathQuery(this.context, "//" + Field.getType() + "[" + Field.MemberNames.Field_Template + "='" + this.config.getId() + "']", Integer.MAX_VALUE, 0, sortMap);
-		for (IMendixObject column : result) {
+		for (IMendixObject column : this.config.getColumns()) {
 			DataSource source = DataSource.valueOf((String) column.getValue(this.context, Field.MemberNames.DataSource.toString()));
+			Integer colNr = column.getValue(this.context, Field.MemberNames.ColNumber.toString());
+			
 			Object value = null;
 			Field field = Field.initialize(this.context, column);
 			switch (source) {
 			case Attribute:
 
-				value = this.getValueFromAttribute(column, object);
+				value = this.getValueFromAttribute(colNr, column, object);
 				break;
 			case Reference:
-				value = this.getValueFromReference(column, object);
+				value = this.getValueFromReference(colNr, column, object);
 				break;
 			case StaticValue:
 				value = column.getValue(this.context, Field.MemberNames.StaticValue.toString());
 				break;
 			case Newline:
-				builder.append("\r\n");
+				builder.append(this.config.getLineEnd());
 				continue;
 			}
 
@@ -179,13 +177,13 @@ public class FixedLengthLineHandler extends ILineHandler {
 		}
 	}
 
-	private Object getValueFromReference(IMendixObject highlightObject, IMendixObject exportObject) throws CoreException {
+	private Object getValueFromReference(int colNr, IMendixObject highlightObject, IMendixObject exportObject) throws CoreException {
 		List<IMendixObject> referenceResult = this.getResultByHighlight(highlightObject, exportObject, 1);
 
-		return this.getValueFromReference(referenceResult, highlightObject, 0);
+		return this.getValueFromReference(colNr, referenceResult, highlightObject, 0);
 	}
 
-	private Object getValueFromReference(List<IMendixObject> referenceResult, IMendixObject columnObject, int listPosition) throws CoreException {
+	private Object getValueFromReference(int colNr, List<IMendixObject> referenceResult, IMendixObject columnObject, int listPosition) throws CoreException {
 		Object value = "";
 
 		if (referenceResult.size() > listPosition) {
@@ -193,7 +191,7 @@ public class FixedLengthLineHandler extends ILineHandler {
 			IMendixObject member = Core.retrieveId(this.context, (IMendixIdentifier) columnObject.getValue(this.context, Field.MemberNames.Field_MxObjectMember.toString()));
 			String memberName = (String) member.getValue(this.context, MxObjectMember.MemberNames.AttributeName.toString());
 
-			value = getValueByType(this.determineRenderType(columnObject), referencedObject.getValue(this.context, memberName));
+			value = getValueByType(colNr, this.determineRenderType(columnObject), referencedObject.getValue(this.context, memberName));
 		}
 
 		if (value == null)
@@ -213,19 +211,22 @@ public class FixedLengthLineHandler extends ILineHandler {
 		return Core.retrieveXPathQuery(this.context, "//" + objectTypeName + "[" + referenceName + "='" + exportObject.getId().toLong() + "']", limit, 0, sortMap);
 	}
 
-	private Object getValueFromAttribute(IMendixObject columnObject, IMendixObject exportObject) throws CoreException {
-		IMendixObject member = Core.retrieveId(this.context, (IMendixIdentifier) columnObject.getValue(this.context, Field.MemberNames.Field_MxObjectMember.toString()));
+	private Object getValueFromAttribute(int colNr, IMendixObject columnObject, IMendixObject exportObject) throws CoreException {
+		IMendixIdentifier memberId = columnObject.getValue(this.context, Field.MemberNames.Field_MxObjectMember.toString());
+		if( memberId == null )
+			throw new CoreException("No attribute selected for field: " + colNr + "-" + columnObject.getValue(this.context, Field.MemberNames.Description.toString()));
+		IMendixObject member = Core.retrieveId(this.context, (IMendixIdentifier) memberId);
 		Object value = exportObject.getValue(this.context, (String) member.getValue(this.context, MxObjectMember.MemberNames.AttributeName.toString()));
 
-		Object strValue = getValueByType(this.determineRenderType(columnObject), value);
-		if (strValue == null)
+		Object attrValue = getValueByType(colNr, this.determineRenderType(columnObject), value);
+		if (attrValue == null)
 			return "";
 
-		return strValue;
+		return attrValue;
 	}
 	
 	
-	private static Object getValueByType( PrimitiveType type, Object value ) throws ParseException {
+	private Object getValueByType( int colNr, PrimitiveType type, Object value ) throws CoreException {
 		Object returnValue = null;
 		switch (type) {
 		case Boolean:
@@ -260,6 +261,10 @@ public class FixedLengthLineHandler extends ILineHandler {
 			
 			break;
 		}
+		
+		String microflowParser = this.config.getMicroflowParser( colNr );  
+		if( microflowParser != null )
+			returnValue = Core.execute(this.context, microflowParser, returnValue);
 
 		return returnValue;
 	}

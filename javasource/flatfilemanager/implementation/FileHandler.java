@@ -10,6 +10,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.OutputStreamWriter;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 
@@ -24,11 +25,14 @@ import com.mendix.systemwideinterfaces.core.IContext;
 import com.mendix.systemwideinterfaces.core.IMendixIdentifier;
 import com.mendix.systemwideinterfaces.core.IMendixObject;
 
+import administration.proxies.microflows.Microflows;
+import flatfilemanager.proxies.Field;
 import flatfilemanager.proxies.FormatType;
 import flatfilemanager.proxies.LineEndChar;
 import flatfilemanager.proxies.ReferenceOrObject;
 import flatfilemanager.proxies.Template;
 import flatfilemanager.proxies.TemplateReference;
+import mxmodelreflection.proxies.MxObjectMember;
 import mxmodelreflection.proxies.MxObjectReference;
 import mxmodelreflection.proxies.MxObjectType;
 
@@ -51,25 +55,41 @@ public class FileHandler {
 		private String quoteChar;
 		private boolean headerOnFirstLine;
 		private String objectType;
+		private HashMap<Integer, String> microflowParsers = new HashMap<>();
+		private List<IMendixObject> columns;
 
 		private TemplateConfiguration(IMendixObject template) throws CoreException {
-			this.totalLength = (Integer) template.getValue(FileHandler.this.context, Template.MemberNames.TotalLength.toString());
-			this.number = template.getValue(FileHandler.this.context, Template.MemberNames.Nr.toString());
-			this.formatType = FormatType.valueOf((String) template.getValue(FileHandler.this.context, Template.MemberNames.FormatType.toString()));
-			this.delimiter = (String) template.getValue(FileHandler.this.context, Template.MemberNames.Delimiter.toString());
-			String lineEnd = (String) template.getValue(FileHandler.this.context, Template.MemberNames.LineEnd.toString());
+			IContext context = FileHandler.this.context;
+					
+			this.totalLength = (Integer) template.getValue(context, Template.MemberNames.TotalLength.toString());
+			this.number = template.getValue(context, Template.MemberNames.Nr.toString());
+			this.formatType = FormatType.valueOf((String) template.getValue(context, Template.MemberNames.FormatType.toString()));
+			this.delimiter = (String) template.getValue(context, Template.MemberNames.Delimiter.toString());
+			String lineEnd = (String) template.getValue(context, Template.MemberNames.LineEnd.toString());
 			if( lineEnd != null )
 				this.lineEnd = LineEndChar.valueOf(lineEnd);
-			this.escapeChar = (String) template.getValue(FileHandler.this.context, Template.MemberNames.EscapeChar.toString());
-			this.quoteChar = (String) template.getValue(FileHandler.this.context, Template.MemberNames.QuoteChar.toString());
-			this.headerOnFirstLine = (Boolean) template.getValue(FileHandler.this.context, Template.MemberNames.HeadersOnFirstLine.toString());
+			this.escapeChar = (String) template.getValue(context, Template.MemberNames.EscapeChar.toString());
+			this.quoteChar = (String) template.getValue(context, Template.MemberNames.QuoteChar.toString());
+			this.headerOnFirstLine = (Boolean) template.getValue(context, Template.MemberNames.HeadersOnFirstLine.toString());
 
-			IMendixIdentifier id = template.getValue(FileHandler.this.context, Template.MemberNames.Template_MxObjectType.toString());
-			IMendixObject obj = Core.retrieveId(FileHandler.this.context, id);
+			IMendixIdentifier id = template.getValue(context, Template.MemberNames.Template_MxObjectType.toString());
+			IMendixObject obj = Core.retrieveId(context, id);
 			
-			this.objectType = (String) obj.getValue(FileHandler.this.context, MxObjectType.MemberNames.CompleteName.toString());
+			this.objectType = (String) obj.getValue(context, MxObjectType.MemberNames.CompleteName.toString());
 			
 			this.id = template.getId().toLong();
+
+			HashMap<String, String> sortMap = new HashMap<String, String>();
+			sortMap.put(Field.MemberNames.ColNumber.toString(), "ASC");
+			this.columns = Core.retrieveXPathQuery(context, "//" + Field.getType() + "[" + Field.MemberNames.Field_Template + "='" + this.id + "']", Integer.MAX_VALUE, 0, sortMap);
+			
+			for( IMendixObject column : this.columns ) {
+				IMendixIdentifier mfId = column.getValue(context, Field.MemberNames.Field_Microflows.toString());
+				if( mfId != null ) {
+					IMendixObject mfObj = Core.retrieveId(context, mfId);
+					this.microflowParsers.put(column.getValue(context, Field.MemberNames.ColNumber.toString()), mfObj.getValue(context, "CompleteName"));
+				}
+			}
 		}
 
 		public String getObjectType() {
@@ -126,6 +146,17 @@ public class FileHandler {
 		public boolean headerOnFirstLine() {
 			return this.headerOnFirstLine;
 		}
+
+		public List<IMendixObject> getColumns() {
+			return this.columns;
+		}
+
+		public String getMicroflowParser( int colNr ) {
+			if( this.microflowParsers.containsKey(colNr) ) 
+				return this.microflowParsers.get(colNr);
+			
+			return null;
+		}
 	}
 
 	private TemplateConfiguration getTemplateConfig(IMendixObject template) throws CoreException {
@@ -175,22 +206,31 @@ public class FileHandler {
 		ILineHandler lineHandler = LineHandlerFactory.getLineHandler(this.context, config, writer);
 
 		ReferenceOrObject source = ReferenceOrObject.valueOf((String) templateRef.getValue(this.context, TemplateReference.MemberNames.ObjectSource.toString()));
-		IMendixIdentifier subTemplateId = templateRef.getValue(this.context, TemplateReference.MemberNames.TemplateReference_SubTemplate.toString());
-		IMendixObject subTemplate = null;
-		if( subTemplateId != null )
-			subTemplate = Core.retrieveId(this.context, subTemplateId);
-
+		List<IMendixIdentifier> subTemplateIdList = templateRef.getValue(this.context, TemplateReference.MemberNames.TemplateReference_SubTemplate.toString());
+		List<IMendixObject> subTemplates = null;
+		if( subTemplateIdList != null && subTemplateIdList.size() > 0 ) {
+			subTemplates = new ArrayList<IMendixObject>();
+			for( IMendixIdentifier id : subTemplateIdList )
+				subTemplates.add( Core.retrieveId(this.context, id) );
+		}
+		
 		if (source == ReferenceOrObject.Reference) {
 			this.logger.debug("Creating multiple lines, using template: " + config.getNumber() );
 			
 			TemplateReference tr = TemplateReference.initialize(this.context, templateRef);
 
 			MxObjectReference ref = tr.getTemplateReference_MxObjectReference();
+			if( ref == null )
+				throw new CoreException("The Template reference is required");
 			MxObjectType objTypeTo = tr.getTemplateReference_MxObjectType_To();
-
+			if( objTypeTo == null )
+				throw new CoreException("The Template Object Type is required");
+			MxObjectMember sortOnMember = tr.getTemplateReference_SortOn_MxObjectMember();
+			if( sortOnMember == null )
+				throw new CoreException("The attribute to sort on is required");
 			
 			HashMap<String, String> sortMap = new HashMap<String, String>();
-			sortMap.put("createdDate", "ASC");
+			sortMap.put(sortOnMember.getAttributeName(), "ASC");
 			int totalSize = 0, limit = 1000, offset = 0;
 			List<IMendixObject> result;
 			do {
@@ -198,8 +238,9 @@ public class FileHandler {
 				for (IMendixObject associatedObject : result) {
 					lineHandler.writeLine(associatedObject);
 					
-					if( subTemplate != null ) {
-						processTemplateReference(writer, subTemplate, associatedObject);
+					if( subTemplates != null ) {
+						for( IMendixObject subTemplate : subTemplates )
+							processTemplateReference(writer, subTemplate, associatedObject);
 					}
 				}
 				totalSize+=result.size();
@@ -212,9 +253,11 @@ public class FileHandler {
 		else {
 			this.logger.debug("Creating single line, using template: " + config.getNumber() );
 			lineHandler.writeLine(exportObject);
-			if( subTemplate != null ) {
-				processTemplateReference(writer, subTemplate, exportObject);
+			if( subTemplates != null ) {
+				for( IMendixObject subTemplate : subTemplates )
+					processTemplateReference(writer, subTemplate, exportObject);
 			}
+
 		}
 		
 	}

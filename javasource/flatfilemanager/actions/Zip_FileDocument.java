@@ -62,7 +62,7 @@ public class Zip_FileDocument extends CustomJavaAction<IMendixObject>
 	 * Returns a string representation of this action
 	 */
 	@Override
-	public String toString()
+	public java.lang.String toString()
 	{
 		return "Zip_FileDocument";
 	}

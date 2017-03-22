@@ -14,7 +14,7 @@ import flatfilemanager.implementation.FileHandler;
 import com.mendix.systemwideinterfaces.core.IContext;
 import com.mendix.webui.CustomJavaAction;
 
-public class ImportFromFile extends CustomJavaAction<Boolean>
+public class ImportFromFile extends CustomJavaAction<java.lang.Boolean>
 {
 	private IMendixObject ImportObject;
 	private IMendixObject __ImportConfig;
@@ -31,7 +31,7 @@ public class ImportFromFile extends CustomJavaAction<Boolean>
 	}
 
 	@Override
-	public Boolean executeAction() throws Exception
+	public java.lang.Boolean executeAction() throws Exception
 	{
 		this.ImportConfig = __ImportConfig == null ? null : flatfilemanager.proxies.ExportTemplateSet.initialize(getContext(), __ImportConfig);
 
@@ -49,7 +49,7 @@ public class ImportFromFile extends CustomJavaAction<Boolean>
 	 * Returns a string representation of this action
 	 */
 	@Override
-	public String toString()
+	public java.lang.String toString()
 	{
 		return "ImportFromFile";
 	}

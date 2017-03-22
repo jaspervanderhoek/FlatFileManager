@@ -15,16 +15,16 @@ import flatfilemanager.implementation.FileHandler;
 import com.mendix.systemwideinterfaces.core.IContext;
 import com.mendix.webui.CustomJavaAction;
 
-public class ExportToFile extends CustomJavaAction<Boolean>
+public class ExportToFile extends CustomJavaAction<java.lang.Boolean>
 {
 	private IMendixObject ExportObject;
 	private IMendixObject __ExportConfig;
 	private flatfilemanager.proxies.ExportTemplateSet ExportConfig;
 	private IMendixObject __ExportFile;
 	private system.proxies.FileDocument ExportFile;
-	private String Filename;
+	private java.lang.String Filename;
 
-	public ExportToFile(IContext context, IMendixObject ExportObject, IMendixObject ExportConfig, IMendixObject ExportFile, String Filename)
+	public ExportToFile(IContext context, IMendixObject ExportObject, IMendixObject ExportConfig, IMendixObject ExportFile, java.lang.String Filename)
 	{
 		super(context);
 		this.ExportObject = ExportObject;
@@ -34,7 +34,7 @@ public class ExportToFile extends CustomJavaAction<Boolean>
 	}
 
 	@Override
-	public Boolean executeAction() throws Exception
+	public java.lang.Boolean executeAction() throws Exception
 	{
 		this.ExportConfig = __ExportConfig == null ? null : flatfilemanager.proxies.ExportTemplateSet.initialize(getContext(), __ExportConfig);
 
@@ -54,7 +54,7 @@ public class ExportToFile extends CustomJavaAction<Boolean>
 	 * Returns a string representation of this action
 	 */
 	@Override
-	public String toString()
+	public java.lang.String toString()
 	{
 		return "ExportToFile";
 	}
