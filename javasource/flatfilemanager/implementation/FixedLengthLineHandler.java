@@ -73,14 +73,14 @@ public class FixedLengthLineHandler extends ILineHandler {
 			DataSource source = DataSource.valueOf((String) column.getValue(this.context, Field.MemberNames.DataSource.toString()));
 			Integer colNr = entry.getKey();
 			
-			Object value = null;
+			String value = null;
 			Field field = Field.initialize(this.context, column);
 			switch (source) {
 			case Attribute:
 				value = this.getValueFromAttribute(colNr, config, column, object);
 				break;
 			case Reference:
-				value = this.getValueFromReference(colNr, config, column, object);
+				value = this.getValueFromReference(config, column, object);
 				break;
 			case StaticValue:
 				value = config.getStaticValue();
@@ -106,11 +106,11 @@ public class FixedLengthLineHandler extends ILineHandler {
 		throw new CoreException("This function is not implemented");
 	}
 
-	private static String generateFixedLengthOutput(TemplateConfiguration config, Object value, Field field) throws CoreException {
+	private static String generateFixedLengthOutput(TemplateConfiguration config, String value, Field field) throws CoreException {
 		try {
-			String mask = determineMask(field);
-			logger.debug("Using mask: " + mask);
-			String outputValue = padIfString(field, mask, value);
+//			String mask = determineMask(field);
+//			logger.debug("Using mask: " + mask);
+			String outputValue = padIfString(field, value);
 	
 			if (outputValue.length() > field.getLength()) {
 				logger.error("Field: " + config.getTemplateName() + " - " + field.getColNumber() + " value is to long: " + outputValue.length() + " instead of: " + field.getLength() + " the value is: " + outputValue);
@@ -125,53 +125,53 @@ public class FixedLengthLineHandler extends ILineHandler {
 		}
 	}
 
-	private static String padIfString(Field field, String mask, Object value) {
-		String outputValue = "";
-		if( value != null )
-			outputValue = String.format(mask, value);
-			
+	private static String padIfString(Field field, String value) {
+		//Catch null values since the pad function doesn't work for null values. 
+		if( value == null )
+			value = "";
+		
 		String appendChar = field.getAppendCharacter();
 		SuffixOrPrefix location = field.getAppend();
 		if (location == SuffixOrPrefix.Prefix) {
-			return StringUtils.leftPad(outputValue, field.getLength(), appendChar);
+			return StringUtils.leftPad(value, field.getLength(), appendChar);
 		}
 		else {
-			return StringUtils.rightPad(outputValue, field.getLength(), appendChar);
+			return StringUtils.rightPad(value, field.getLength(), appendChar);
 		}	
 	}
 
-	private static String determineMask(Field field) {
-		int length = field.getLength();
-		FieldDataType datatype = field.getFormatAsDataType();
-		int nrOfDecimals = field.getNrOfDecimals();
-//		String appendChar = (field.getAppendCharacter() == null ? "" : field.getAppendCharacter());
-		String mask = "";
-		switch (datatype) {
-		case DecimalType:
-			mask = length + "." + nrOfDecimals;
-			mask += "f";
-			break;
-		case IntegerType:
-			mask = length + "d";
-			break;
-		case StringType:
-		case DateType:
-			mask += "s";
-
-			// switch (location) {
-			// case Prefix:
-			// mask = appendChar + mask;
-			// break;
-			// case Suffix:
-			// mask = "-" + appendChar + mask;
-			// break;
-			// }
-
-			break;
-		}
-
-		return "%" + mask;
-	}
+//	private static String determineMask(Field field) {
+//		int length = field.getLength();
+//		FieldDataType datatype = field.getFormatAsDataType();
+//		int nrOfDecimals = field.getNrOfDecimals();
+////		String appendChar = (field.getAppendCharacter() == null ? "" : field.getAppendCharacter());
+//		String mask = "";
+//		switch (datatype) {
+//		case DecimalType:
+//			mask = length + "." + nrOfDecimals;
+//			mask += "f";
+//			break;
+//		case IntegerType:
+//			mask = length + "d";
+//			break;
+//		case StringType:
+//		case DateType:
+//			mask += "s";
+//
+//			// switch (location) {
+//			// case Prefix:
+//			// mask = appendChar + mask;
+//			// break;
+//			// case Suffix:
+//			// mask = "-" + appendChar + mask;
+//			// break;
+//			// }
+//
+//			break;
+//		}
+//
+//		return "%" + mask;
+//	}
 
 	private PrimitiveType determineRenderType(IMendixObject columnObject) {
 		FieldDataType dataType = FieldDataType.valueOf((String) columnObject.getValue(this.context, Field.MemberNames.FormatAsDataType.toString()));
@@ -189,21 +189,21 @@ public class FixedLengthLineHandler extends ILineHandler {
 		return null;
 	}
 
-	private Object getValueFromReference(int colNr, ColumnConfig config, IMendixObject highlightObject, IMendixObject exportObject) throws CoreException {
+	private String getValueFromReference(ColumnConfig config, IMendixObject highlightObject, IMendixObject exportObject) throws CoreException {
 		List<IMendixObject> referenceResult = this.getResultByHighlight(highlightObject, exportObject, 1);
 
-		return this.getValueFromReference(colNr, config, referenceResult, highlightObject, 0);
+		return this.getValueFromReference(config, referenceResult, highlightObject, 0);
 	}
 
-	private Object getValueFromReference(int colNr, ColumnConfig config, List<IMendixObject> referenceResult, IMendixObject columnObject, int listPosition) throws CoreException {
-		Object value = "";
+	private String getValueFromReference(ColumnConfig config, List<IMendixObject> referenceResult, IMendixObject columnObject, int listPosition) throws CoreException {
+		String value = "";
 
 		if (referenceResult.size() > listPosition) {
 			IMendixObject referencedObject = referenceResult.get(listPosition);
 			IMendixObject member = Core.retrieveId(this.context, (IMendixIdentifier) columnObject.getValue(this.context, Field.MemberNames.Field_MxObjectMember.toString()));
 			String memberName = (String) member.getValue(this.context, MxObjectMember.MemberNames.AttributeName.toString());
 
-			value = getValueByType(colNr, this.determineRenderType(columnObject), referencedObject.getValue(this.context, memberName), config.getMask());
+			value = getValueByType(config, this.determineRenderType(columnObject), referencedObject.getValue(this.context, memberName), config.getMask());
 		}
 
 		if (value == null)
@@ -223,14 +223,14 @@ public class FixedLengthLineHandler extends ILineHandler {
 		return Core.retrieveXPathQuery(this.context, "//" + objectTypeName + "[" + referenceName + "='" + exportObject.getId().toLong() + "']", limit, 0, sortMap);
 	}
 
-	private Object getValueFromAttribute(int colNr, ColumnConfig config, IMendixObject columnObject, IMendixObject exportObject) throws CoreException {
+	private String getValueFromAttribute(int colNr, ColumnConfig config, IMendixObject columnObject, IMendixObject exportObject) throws CoreException {
 		IMendixIdentifier memberId = columnObject.getValue(this.context, Field.MemberNames.Field_MxObjectMember.toString());
 		if( memberId == null )
 			throw new CoreException("No attribute selected for field: " + colNr + "-" + columnObject.getValue(this.context, Field.MemberNames.Description.toString()));
 		IMendixObject member = Core.retrieveId(this.context, (IMendixIdentifier) memberId);
 		Object value = exportObject.getValue(this.context, (String) member.getValue(this.context, MxObjectMember.MemberNames.AttributeName.toString()));
 
-		Object attrValue = getValueByType(colNr, this.determineRenderType(columnObject), value, config.getMask());
+		String attrValue = getValueByType(config, this.determineRenderType(columnObject), value, config.getMask());
 //		if (attrValue == null)
 //			return ;
 
@@ -238,22 +238,15 @@ public class FixedLengthLineHandler extends ILineHandler {
 	}
 	
 	
-	private Object getValueByType( int colNr, PrimitiveType type, Object value, String mask ) throws CoreException {
-		Object returnValue = null;
+	private String getValueByType( ColumnConfig columnConfig, PrimitiveType type, Object value, String mask ) throws CoreException {
+		String returnValue = null;
 		switch (type) {
-		case Boolean:
-			returnValue = ValueParser.getBooleanValue(value);
-			break;
 		case Decimal:
-			returnValue = ValueParser.getBigDecimalValue(value);
+			returnValue = ValueParser.getStringValueFromNumber(value, columnConfig.getNrOfDecimals());
 			break;
 		case Integer:
-			returnValue = ValueParser.getIntegerValue(value);
-			break;
 		case AutoNumber:
 		case Long:
-			returnValue = ValueParser.getLongValue(value);
-			break;
 		case Enum:
 		case String:
 		case HashString:
@@ -265,14 +258,14 @@ public class FixedLengthLineHandler extends ILineHandler {
 		default:
 			//Compatibility fix since Currency is no longer part of the latest release 
 			if( "Currency".equals( type.toString() ) || "Float".equals( type.toString() ) )
-				returnValue = ValueParser.getDoubleValue(value);
+				returnValue = ValueParser.getStringValueFromNumber(value, columnConfig.getNrOfDecimals());
 			else 
 				logger.warn("Unknown attribute type: " + type );
 			
 			break;
 		}
 		
-		String microflowParser = this.config.getMicroflowParser( colNr );  
+		String microflowParser = columnConfig.getMicroflow( );  
 		if( microflowParser != null )
 			returnValue = Core.execute(this.context, microflowParser, returnValue);
 
