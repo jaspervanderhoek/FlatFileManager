@@ -5,8 +5,6 @@ import java.io.Writer;
 import com.mendix.core.CoreException;
 import com.mendix.systemwideinterfaces.core.IContext;
 
-import flatfilemanager.implementation.FileHandler.TemplateConfiguration;
-
 public class LineHandlerFactory {
 
 	public static ILineHandler getLineHandler(IContext context, TemplateConfiguration config, Writer writer) throws CoreException {

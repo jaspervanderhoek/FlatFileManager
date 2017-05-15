@@ -5,6 +5,7 @@ import java.io.IOException;
 import java.io.Writer;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Map.Entry;
 
 import com.mendix.core.Core;
@@ -16,30 +17,21 @@ import com.mendix.systemwideinterfaces.core.IMendixObject;
 
 import au.com.bytecode.opencsv.CSVParser;
 import au.com.bytecode.opencsv.CSVWriter;
-import flatfilemanager.implementation.FileHandler.TemplateConfiguration;
-import flatfilemanager.implementation.FileHandler.TemplateConfiguration.ColumnConfig;
+import flatfilemanager.implementation.TemplateConfiguration.ColumnConfig;
 import flatfilemanager.proxies.DataSource;
 import flatfilemanager.proxies.Field;
 import mxmodelreflection.proxies.MxObjectMember;
 import mxmodelreflection.proxies.MxObjectReference;
 import mxmodelreflection.proxies.MxObjectType;
 import replication.MetaInfo;
-import replication.ObjectConfig;
-import replication.ReplicationSettings.KeyType;
 import replication.ReplicationSettings.MendixReplicationException;
-import replication.ReplicationSettings.ObjectSearchAction;
 import replication.ValueParser;
 import replication.implementation.CustomReplicationSettings;
-import replication.implementation.ErrorHandler;
-import replication.implementation.MFValueParser;
-import replication.interfaces.IValueParser;
 
 public class DelimitedLineHandler extends ILineHandler {
 
 	private ILogNode logger = Core.getLogger("FlatFileExport");
-	private IContext context;
 	private Writer writer;
-	private TemplateConfiguration config;
 
 	public DelimitedLineHandler() {
 	}
@@ -111,34 +103,10 @@ public class DelimitedLineHandler extends ILineHandler {
 	@Override
 	public void importFromFile(BufferedReader reader, IMendixObject importFile, IMendixObject parameterObjectId, String associationName) throws CoreException, IOException {
 	
-		CustomReplicationSettings settings = new CustomReplicationSettings(this.context, this.config.getObjectType(), new ErrorHandler());
-		ObjectConfig mainConfig = settings.getMainObjectConfig();
-		mainConfig.setObjectSearchAction(ObjectSearchAction.CreateEverything);
+		CustomReplicationSettings settings = initializeSettings(parameterObjectId, associationName);
 
-		if( associationName != null  && parameterObjectId != null ) { 
-			settings.setParentAssociation(associationName);
-			settings.setParentObjectId(parameterObjectId);
-		}
-
-		HashMap<String, String> sortMap = new HashMap<String, String>();
-		sortMap.put(Field.MemberNames.ColNumber.toString(), "ASC");
-		List<IMendixObject> result = Core.retrieveXPathQuery(this.context, "//" + Field.getType() + "[" + Field.MemberNames.Field_Template + "='" + this.config.getId() + "']", Integer.MAX_VALUE, 0, sortMap);
-		for (IMendixObject column : result) {
-			DataSource source = DataSource.valueOf((String) column.getValue(this.context, Field.MemberNames.DataSource.toString()));
-			switch (source) {
-			case Attribute:
-				setMappingFromAttribute(settings, column);
-				break;
-			case Reference:
-				setMappingFromAssociation(settings, column);
-				break;
-			case Newline:
-				break;
-			case StaticValue:
-				break;
-			}
-		}
-
+		Map<Integer,ColumnConfig> columns = this.config.getColumns();
+		
 		FFValueParser vparser = new FFValueParser(settings.getValueParsers(), settings);
 		MetaInfo info = new MetaInfo(settings, vparser, "DelimitedFileImport");
 		CSVParser parser = new CSVParser(this.config.getDelimiter(), this.config.getQuoteChar(), this.config.getEscapeChar(), false, true);
@@ -153,31 +121,29 @@ public class DelimitedLineHandler extends ILineHandler {
 				if (content.length == 1)
 					content = parser.parseLine(content[0]);
 
-				for (IMendixObject columnObject : result) {
+				for (Entry<Integer, ColumnConfig> entry : columns.entrySet() ) {
 					try {
-
-						String alias = columnObject.getValue(this.context, Field.MemberNames.Description.toString());
+						ColumnConfig cConfig = entry.getValue();
+						colNr = entry.getKey();
+						
+						String alias = cConfig.getDescription();
 						if (this.logger.isDebugEnabled())
 							this.logger.debug(alias + " - NrOfValues" + content.length);
 						
-						colNr = (Integer) columnObject.getValue(this.context, Field.MemberNames.ColNumber.toString());
 						
-						if (colNr < content.length) {
-							DataSource source = DataSource.valueOf((String) columnObject.getValue(this.context, Field.MemberNames.DataSource.toString()));
-							switch (source) {
+						if (colNr <= content.length) {
+							switch (cConfig.getValueSource()) {
 							case Attribute:
 							case Reference:
 								String fieldAlias = String.valueOf(colNr);
 								
-								
-								info.addValue(String.valueOf(lineNumber), fieldAlias, vparser.getValue(settings.getMemberType(fieldAlias), fieldAlias, content[colNr]));
+								info.addValue(String.valueOf(lineNumber), fieldAlias, vparser.getValue(settings.getMemberType(fieldAlias), fieldAlias, content[colNr-1]));
 								break;
 							case Newline:
 								break;
 							case StaticValue:
 								break;
 							}
-//							colNr++;
 						}
 						else {
 							break;
@@ -202,33 +168,6 @@ public class DelimitedLineHandler extends ILineHandler {
 		}
 	}
 
-	private void setMappingFromAttribute(CustomReplicationSettings settings, IMendixObject columnObject) throws CoreException {
-		IMendixObject member = Core.retrieveId(this.context, (IMendixIdentifier) columnObject.getValue(this.context, Field.MemberNames.Field_MxObjectMember.toString()));
-
-		IValueParser parser = null;
-		IMendixIdentifier mfId = (IMendixIdentifier) columnObject.getValue(this.context, Field.MemberNames.Field_Microflows.toString());
-		if (mfId != null) {
-			parser = new MFValueParser(this.context, Core.retrieveId(this.context, mfId));
-		}
-		
-		String alias = ValueParser.getTrimmedValue( columnObject.getValue(this.context, Field.MemberNames.ColNumber.toString()), null, null );
-		settings.addColumnMapping(alias, (String) member.getValue(this.context, MxObjectMember.MemberNames.AttributeName.toString()), KeyType.NoKey, false, parser);
-	}
-
-	private void setMappingFromAssociation(CustomReplicationSettings settings, IMendixObject columnObject) throws CoreException {
-		IMendixObject member = Core.retrieveId(this.context, (IMendixIdentifier) columnObject.getValue(this.context, Field.MemberNames.Field_MxObjectMember.toString()));
-		IMendixObject objectType = Core.retrieveId(this.context, (IMendixIdentifier) columnObject.getValue(this.context, Field.MemberNames.Field_MxObjectType_Reference.toString()));
-		IMendixObject reference = Core.retrieveId(this.context, (IMendixIdentifier) columnObject.getValue(this.context, Field.MemberNames.Field_MxObjectReference.toString()));
-
-		IValueParser parser = null;
-		IMendixIdentifier mfId = (IMendixIdentifier) columnObject.getValue(this.context, Field.MemberNames.Field_Microflows.toString());
-		if (mfId != null) {
-			parser = new MFValueParser(this.context, Core.retrieveId(this.context, mfId));
-		}
-
-		String alias = String.valueOf( columnObject.getValue(this.context, Field.MemberNames.ColNumber.toString()) );
-		settings.addAssociationMapping(alias, (String) reference.getValue(this.context, MxObjectReference.MemberNames.CompleteName.toString()), (String) objectType.getValue(this.context, MxObjectType.MemberNames.CompleteName.toString()), (String) member.getValue(this.context, MxObjectMember.MemberNames.AttributeName.toString()), parser, KeyType.NoKey, false);
-	}
 
 //	private PrimitiveType determineRenderType(IMendixObject columnObject) {
 //		FieldDataType dataType = FieldDataType.valueOf((String) columnObject.getValue(this.context, Field.MemberNames.FormatAsDataType.toString()));
