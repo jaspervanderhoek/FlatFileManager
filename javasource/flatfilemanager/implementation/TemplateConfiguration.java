@@ -17,6 +17,8 @@ import flatfilemanager.proxies.LineEndChar;
 import flatfilemanager.proxies.SuffixOrPrefix;
 import flatfilemanager.proxies.Template;
 import mxmodelreflection.proxies.MxObjectType;
+import replication.implementation.MFValueParser;
+import replication.interfaces.IValueParser;
 
 public class TemplateConfiguration {
 	
@@ -38,7 +40,7 @@ public class TemplateConfiguration {
 
 	public class ColumnConfig {
 
-		private String microflow;
+		private IValueParser microflowValueParser;
 		private String mask = null;
 		private String staticValue = null;
 
@@ -83,16 +85,18 @@ public class TemplateConfiguration {
 			this.nrOfDecimals = nrOfDecimals;
 		}
 
-		public void addMicroflow( String microflow ) {
-			this.microflow = microflow;
+		public void addMicroflow( IMendixObject microflowObject ) throws CoreException {
+			if( microflowObject != null ) {
+				this.microflowValueParser = new MFValueParser(TemplateConfiguration.this.context, microflowObject);
+			}
 		}
 
 		public IMendixObject getColumnObj() {
 			return this.columnObj;
 		}
 
-		protected String getMicroflow() {
-			return this.microflow;
+		protected IValueParser getMicroflow() {
+			return this.microflowValueParser;
 		}
 
 		public String getMask() {
@@ -108,15 +112,15 @@ public class TemplateConfiguration {
 		}
 
 		public DataSource getValueSource() {
-			return datasource;
+			return this.datasource;
 		}
 
 		public int getLength() {
-			return length;
+			return this.length;
 		}
 
 		public int getColNumber() {
-			return colNumber;
+			return this.colNumber;
 		}
 
 		public String getAppendCharacter() {
@@ -175,7 +179,7 @@ public class TemplateConfiguration {
 			IMendixIdentifier mfId = column.getValue(context, Field.MemberNames.Field_Microflows.toString());
 			if ( mfId != null ) {
 				IMendixObject mfObj = Core.retrieveId(context, mfId);
-				cc.addMicroflow(mfObj.getValue(context, "CompleteName"));
+				cc.addMicroflow( mfObj );
 			}
 
 			this.columns.put(colNr, cc);
@@ -241,10 +245,10 @@ public class TemplateConfiguration {
 		return this.columns;
 	}
 
-	public String getMicroflowParser( int colNr ) {
-		if ( this.columns.containsKey(colNr) )
-			return this.columns.get(colNr).getMicroflow();
-
-		return null;
-	}
+//	public String getMicroflowParser( int colNr ) {
+//		if ( this.columns.containsKey(colNr) )
+//			return this.columns.get(colNr).getMicroflow();
+//
+//		return null;
+//	}
 }

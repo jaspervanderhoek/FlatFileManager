@@ -34,6 +34,7 @@ import replication.MetaInfo;
 import replication.ValueParser;
 import replication.implementation.CustomReplicationSettings;
 import replication.implementation.NotImplementedException;
+import replication.interfaces.IValueParser;
 
 public class FixedLengthLineHandler extends ILineHandler {
 
@@ -329,8 +330,13 @@ public class FixedLengthLineHandler extends ILineHandler {
 	}
 
 
-	private String getValueByType( ColumnConfig columnConfig, PrimitiveType type, Object value, String mask ) throws CoreException {
+	private static String getValueByType( ColumnConfig columnConfig, PrimitiveType type, Object value, String mask ) throws CoreException {
 		String returnValue = null;
+		
+		IValueParser microflowParser = columnConfig.getMicroflow();  
+		if( microflowParser != null )
+			return  ValueParser.getTrimmedValue( microflowParser.parseValue(value), null, null );
+		
 		switch (type) {
 		case Decimal:
 			returnValue = ValueParser.getStringValueFromNumber(value, columnConfig.getNrOfDecimals());
@@ -355,10 +361,6 @@ public class FixedLengthLineHandler extends ILineHandler {
 
 			break;
 		}
-
-		String microflowParser = columnConfig.getMicroflow();
-		if ( microflowParser != null )
-			returnValue = Core.execute(this.context, microflowParser, returnValue);
 
 		return returnValue;
 	}
